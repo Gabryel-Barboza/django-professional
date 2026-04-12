@@ -1,0 +1,12 @@
+{% extends 'base.html' %} {% block title %} Vitrine de Produtos {% endblock %}
+
+{% block content %}
+  <h1>Nossos Produtos</h1>
+  <ul>
+    {% for product in products_list %}
+      <li class="{% if product.stock < 5 %}alert-stock{% endif %}">
+        <a href="{% url 'product_detail' product.pk %}">{{ product.name }}</a> - Estoque: {{ product.stock }} - Preço: R$ {{ product.price|floatformat:2}}
+      </li>
+    {% endfor %}
+  </ul>
+  {% endblock %}

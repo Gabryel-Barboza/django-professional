@@ -1,0 +1,50 @@
+services:
+  # Serviço do MySQL
+  db:
+    image: mysql
+    container_name: django-professional-database
+    env_file:
+      - .env
+    ports:
+      - 3306:3306
+    networks:
+      - django-network
+    volumes:
+      - django-mysql-data:/var/lib/mysql
+    # Checando se serviço está disponível
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 2s
+      interval: 2s
+      retries: 10
+
+  # Serviço do Django
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      # Esperar serviço checar status ativo para iniciar
+      db:
+        condition: service_healthy
+    command: ["/bin/sh", "./start.sh"]
+    container_name: django-professional-web
+    # Além do .env, adiciono variáveis não sensíveis aqui para facilidade de configurar o db
+    environment:
+      - DB_HOST=db
+      - DB_PORT=3306
+    env_file:
+      - .env
+    ports:
+      - 8080:8080
+    networks:
+      - django-network
+    volumes:
+      - .:/web
+
+volumes:
+  django-mysql-data:
+
+networks:
+  django-network:
+    driver: bridge

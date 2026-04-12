@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+
+{% block content %}
+  <a href="{% url 'products_list' %}">← Voltar para a lista</a>  
+  <h1>{{ product.name }}</h1>
+  <p><strong>Preço:</strong> {{ product.price }}</p>
+  <p><strong>Categoria:</strong> {{ product.category.name }}</p>
+  <p><strong>Adicionado em:</strong> {{ product.created_at|date:"d/m/Y" }}</p>
+
+  <div class="uuid-info">
+    <small>Identificador: {{ product.pk }} </small>
+  </div>
+{% endblock %}
