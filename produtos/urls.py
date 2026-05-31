@@ -1,9 +1,34 @@
+"""
+URLs do App Produtos
+
+┌──────────────────────────────────────────────────────────────────────┐
+│ ROTEAMENTO POR APP                                                   │
+│ Cada app tem seu próprio urls.py, incluído pelo urls.py principal    │
+│ via include(). Isso organiza o projeto por domínio.                  │
+│                                                                      │
+│ CONVERSORES DE TIPO (path converters):                               │
+│   <str:param>    →  qualquer string (default)                        │
+│   <int:param>    →  apenas dígitos (converte para int)               │
+│   <slug:param>   →  slug (letras, nums, hífens, underscores)         │
+│   <uuid:param>   →  UUID válido (converte para uuid.UUID)            │
+│   <path:param>   →  qualquer string, incluindo /                     │
+│                                                                      │
+│ NAME: parâmetro essencial para usar {% url 'nome' arg %} no template │
+│ Se o name mudar, todos os templates que o usam precisam ser          │
+│ atualizados — escolha nomes descritivos e consistentes.              │
+│                                                                      │
+│ ORDEM: Django testa as rotas de cima para baixo.                     │
+│ Coloque rotas mais específicas ANTES das genéricas.                  │
+└──────────────────────────────────────────────────────────────────────┘
+"""
+
 from django.urls import path
 
 from .views import get_product_detail, list_products
 
-# Roteamento para o app produtos, cria um caminho para a rota produtos/ onde a view list_products é ativada, o argumento name é usado dentro de templates para recuperar a rota automaticamente.
 urlpatterns = [
     path('', list_products, name='products_list'),
+    # <uuid:pk> captura um UUID da URL e converte para objeto uuid.UUID
+    # Se a URL não for um UUID válido, retorna 404 automaticamente
     path('product/<uuid:pk>', get_product_detail, name='product_detail'),
 ]

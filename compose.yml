@@ -1,50 +1,111 @@
 services:
-  # Serviço do MySQL
+  # ──────────────────────────────────────────────────────────────────────
+  # SERVIÇO: MySQL (Banco de Dados)
+  # ──────────────────────────────────────────────────────────────────────
+  # O MySQL roda em container separado (cada serviço tem sua responsabilidade).
+  # Isso isola o banco da aplicação — podemos trocar, escalar ou dar manutenção
+  # em um sem afetar o outro.
+  #
+  # CONCEITOS-CHAVE:
+  #   Imagem oficial vs customizada  →  mysql é oficial, mantida pela Oracle
+  #   Port mapping (host:container)  →  3306:3306 = host:container
+  #   Volumes nomeados              →  dados persistem além do ciclo de vida do container
+  #   Healthcheck                   →  só considera o serviço "pronto" quando MySQL aceitar conexões
+  #   Redes (bridge)                →  isolamento + descoberta pelo nome do serviço
+  #   env_file                      →  secrets fora do YAML, nunca versionados
+  # ──────────────────────────────────────────────────────────────────────
   db:
     image: mysql
     container_name: django-professional-database
+
+    # Lê .env e injeta as variáveis no container.
+    # O MySQL usa MYSQL_DATABASE, MYSQL_USER, MYSQL_PASSWORD, MYSQL_ROOT_PASSWORD
+    # para criar o banco e o usuário automaticamente na primeira execução.
     env_file:
       - .env
+
+    # Expõe a porta do host para ferramentas externas (DBeaver, Workbench, etc.)
+    # Formato padrão: "porta_no_host:porta_no_container"
     ports:
       - 3306:3306
+
     networks:
       - django-network
+
+    # Volume nomeado: dados persistem mesmo após docker compose down.
+    # Sem volume, todo dado é perdido ao destruir o container.
     volumes:
       - django-mysql-data:/var/lib/mysql
-    # Checando se serviço está disponível
+
+    # Verifica periodicamente se o MySQL está aceitando conexões.
+    # O serviço web depende desta condição para não iniciar antes do banco.
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       timeout: 2s
       interval: 2s
       retries: 10
 
-  # Serviço do Django
+  # ──────────────────────────────────────────────────────────────────────
+  # SERVIÇO: Django (Aplicação Web)
+  # ──────────────────────────────────────────────────────────────────────
+  # Container principal que executa nossa aplicação Django via runserver.
+  #
+  # CONCEITOS-CHAVE:
+  #   Build context + Dockerfile     →  constrói imagem personalizada
+  #   depends_on + condition         →  orquestração na inicialização
+  #   Bind mount (volume tipo bind)  →  código alterado no host reflete no container instantaneamente
+  #   environment (inline)           →  variáveis com prioridade sobre env_file
+  #   Variável com fallback (:-)     →  ${DB_HOST:-db} = pega DB_HOST do ambiente ou usa "db"
+  # ──────────────────────────────────────────────────────────────────────
   web:
     build:
       context: .
       dockerfile: Dockerfile
+
+    # Dependência inteligente: só inicia DEPOIS que o healthcheck do db passar.
+    # Sem isso, o Django tentaria conectar antes do MySQL estar pronto.
     depends_on:
-      # Esperar serviço checar status ativo para iniciar
       db:
         condition: service_healthy
+
     command: ["/bin/sh", "./start.sh"]
     container_name: django-professional-web
-    # Além do .env, adiciono variáveis não sensíveis aqui para facilidade de configurar o db
+
     environment:
-      - DB_HOST=db
-      - DB_PORT=3306
+      - DB_HOST=${DB_HOST:-db}
+      - DB_PORT=${DB_PORT:-3306}
+
     env_file:
       - .env
+
     ports:
       - 8080:8080
+
     networks:
       - django-network
+
+    # Bind mount: monta o diretório atual do host em /web no container.
+    # Alterações no código são refletidas na hora (hot reload do runserver).
     volumes:
       - .:/web
 
+# ──────────────────────────────────────────────────────────────────────
+# VOLUMES (Armazenamento Persistente)
+# ──────────────────────────────────────────────────────────────────────
+# Diferente de bind mounts, volumes nomeados são gerenciados pelo Docker.
+# Úteis para: banco de dados, arquivos de upload, logs.
+# Comando: docker volume inspect django-mysql-data
+# ──────────────────────────────────────────────────────────────────────
 volumes:
   django-mysql-data:
 
+# ──────────────────────────────────────────────────────────────────────
+# REDES (Networks)
+# ──────────────────────────────────────────────────────────────────────
+# Rede bridge isolada: containers se enxergam pelo nome do serviço.
+# Por isso o Django usa DB_HOST=db — o DNS interno do Docker resolve
+# para o IP do container MySQL.
+# ──────────────────────────────────────────────────────────────────────
 networks:
   django-network:
     driver: bridge

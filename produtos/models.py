@@ -1,27 +1,81 @@
+"""
+MODELS — Camada de Dados (MVT)
+
+┌──────────────────────────────────────────────────────────────────────┐
+│ PADRÃO MVT (Model-View-Template)                                     │
+│                                                                      │
+│   MODEL      =  Representação dos dados (tabelas no banco)           │
+│   VIEW       =  Lógica de negócio (o que fazer com os dados)         │
+│   TEMPLATE   =  Apresentação (HTML que o usuário vê)                 │
+│                                                                      │
+│ Fluxo: URL → View busca dados no Model → renderiza Template          │
+│        ↑                   ↓                                         │
+│        └─────── Resposta HTTP ────────┘                              │
+│                                                                      │
+│ Cada classe que herda de models.Model vira uma tabela no banco.      │
+│ Cada atributo da classe vira uma coluna na tabela.                   │
+└──────────────────────────────────────────────────────────────────────┘
+"""
+
 import uuid
 
 from django.db import models
 
 
-# Modelos para banco de dados
 class Category(models.Model):
-    uuid = models.UUIDField(primary_key=True, default=True, editable=False)
+    """
+    ─── UUID como Primary Key ─────────────────────────────────────────
+    Em vez do auto-increment padrão (id = Integer), usamos UUID (128 bits).
+    Vantagens:
+      - Segurança: não expõe quantidade de registros (ex: /produto/3 vs /produto/a47b...)
+      - Escalabilidade: geração descentralizada (não precisa de sequence no banco)
+      - Unicidade global: impossível colidir entre tabelas ou sistemas diferentes
+      - Ofuscação: atacantes não conseguem "adivinhar" IDs sequenciais
+    """
+    uuid = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField('Categoria', max_length=100)
     slug = models.SlugField(unique=True)
 
-    # Classe para personalizar as opções do modelo
     class Meta:
-        # Altera o nome padrão do modelo no admin.
+        # verbose_name / verbose_name_plural: controlam a exibição NO ADMIN
+        # em português, mesmo que o nome da classe/modelo esteja em inglês.
+        # Útil para refatoração: podemos traduzir o código sem perder a UX.
         verbose_name = 'Categoria'
         verbose_name_plural = 'Categorias'
 
+    # __str__: representação "amigável" do objeto.
+    # Usado no admin, no shell, em logs e em foreign keys no admin.
     def __str__(self):
         return self.name
 
 
 class Product(models.Model):
+    """
+    ─── TIPOS DE CAMPOS ──────────────────────────────────────────────
+    Cada field do Django mapeia para um tipo específico no banco:
+      CharField     → VARCHAR (obriga max_length)
+      DecimalField  → DECIMAL (max_digits = total dígitos, decimal_places = casas decimais)
+      IntegerField  → INT
+      DateTimeField → DATETIME (com auto_now_add = preenche na criação)
+      UUIDField     → CHAR(32) ou BINARY(16) (depende do backend)
+
+    ─── ForeignKey (Relacionamento N:1) ───────────────────────────────
+    Um Produto pertence a uma Categoria; uma Categoria tem N Produtos.
+    Opções de on_delete (o que acontece se a categoria for deletada):
+      CASCADE   → deleta os produtos junto com a categoria
+      SET_NULL  → mantém produtos com category=NULL (precisa null=True)
+      PROTECT   → impede deletar categoria se existirem produtos
+      RESTRICT  → similar ao PROTECT, mas checa no final da transação
+      SET_DEFAULT → atribui o valor padrão (precisa default=...)
+      SET()     → executa uma função personalizada
+      DO_NOTHING → integridade referencial fica a cargo do banco
+
+    related_name: nome da "relação reversa" na API do ORM.
+      Ex: categoria = Category.objects.first()
+          categoria.categories.all()  →  produtos daquela categoria
+      Se omitido, o Django cria: categoria.product_set.all()
+    """
     uuid = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    # Relacionamento muitos para um, blank=True para formulários vazios e related_name= para nome de referência na API do Django.
     category = models.ForeignKey(
         Category,
         on_delete=models.SET_NULL,
@@ -38,6 +92,5 @@ class Product(models.Model):
         verbose_name = 'Produto'
         verbose_name_plural = 'Produtos'
 
-    # O que é retornado no admin e para descrever o modelo
     def __str__(self):
         return self.name

@@ -1,11 +1,25 @@
-# Python-generated files
+# ──────────────────────────────────────────────────────────────────────
+# .gitignore — Arquivos que NÃO entram no versionamento
+# ──────────────────────────────────────────────────────────────────────
+# Regra de ouro: se pode ser gerado por um comando → não versionar.
+#
+# SEGURANÇA: .env tem senhas e secrets → NUNCA versionar
+# DESEMPENHO: __pycache__, .venv são recriáveis localmente
+# TAMANHO: build/, dist/ são artefatos de build → gerados no deploy
+# ──────────────────────────────────────────────────────────────────────
+
+# Python — bytecode compilado (recriado automaticamente ao importar)
 __pycache__/
 *.py[oc]
+
+# Artefatos de build/empacotamento
 build/
 dist/
 wheels/
 *.egg-info
 
-# Virtual environments
+# Ambiente virtual (cada dev cria o seu)
 .venv
+
+# Variáveis de ambiente com secrets (NUNCA versionar!)
 .env

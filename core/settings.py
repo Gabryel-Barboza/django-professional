@@ -13,24 +13,42 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 import os
 from pathlib import Path
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
+from django.core.exceptions import ImproperlyConfigured
+from dotenv import load_dotenv
+
+# ─── Carrega .env antes de qualquer outra configuração ────────────────
+# load_dotenv() procura o arquivo .env na raiz do projeto (onde está manage.py)
+# e chama os.environ.setdefault() para cada variável.
+# Isso permite usar os.getenv() em todo o settings.py.
+# Se o .env não existir (ex: CI/CD), não quebra — apenas ignora.
+load_dotenv()
+
+# Constrói o caminho absoluto da raiz do projeto (um nível acima de core/)
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
+# ─── SECRET KEY ───────────────────────────────────────────────────────
+# Usada para assinar: sessões, tokens CSRF, cookies, mensagens flash.
+# Nunca compartilhar ou versionar. Se vazar, gere outra imediatamente.
+# Gere com: python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
 
-# SECURITY WARNING: don't run with debug turned on in production!
+# Validação explícita com mensagem clara — evita o erro silencioso de None
+if not SECRET_KEY:
+    raise ImproperlyConfigured('A variável de ambiente SECRET_KEY não foi encontrada!')
+
+# ─── DEBUG ────────────────────────────────────────────────────────────
+# True  → mostra stack traces detalhados (NUNCA em produção!)
+# False → páginas de erro genéricas (padrão de segurança)
+# Lendo de os.getenv com falloff 'False' e convertendo string para bool
 DEBUG = os.getenv('DJANGO_DEBUG', 'False') == 'True'
 
+# Domínios/Hosts permitidos para servir a aplicação.
+# Vazio = apenas localhost. Em produção: ['meudominio.com', 'www.meudominio.com']
 ALLOWED_HOSTS = []
 
-
-# Application definition
-
+# ─── APPLICATION DEFINITION ───────────────────────────────────────────
+# A ordem importa: Django carrega os apps nesta sequência.
+# Apps do Django primeiro (admin, auth, etc.), depois apps do projeto.
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -42,6 +60,16 @@ INSTALLED_APPS = [
     'users',
 ]
 
+# ─── MIDDLEWARE ───────────────────────────────────────────────────────
+# Pipeline de requisição/resposta. Cada middleware processa a request
+# na ordem de chegada e a response na ordem inversa.
+#   SecurityMiddleware          →  HTTPS redirect, HSTS, X-Content-Type-Options
+#   SessionMiddleware           →  gerencia sessões (cookie baseado ou server-side)
+#   CommonMiddleware           →  URL normalization (ex: /foo → /foo/)
+#   CsrfViewMiddleware         →  proteção contra CSRF (Cross-Site Request Forgery)
+#   AuthenticationMiddleware   →  associa request.user ao usuário logado
+#   MessageMiddleware          →  flash messages (mensagens entre requisições)
+#   XFrameOptionsMiddleware    →  proteção contra clickjacking (X-Frame-Options)
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -54,6 +82,10 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'core.urls'
 
+# ─── TEMPLATES ────────────────────────────────────────────────────────
+# DIRS: pastas GLOBAIS de templates (procura primeiro aqui)
+# APP_DIRS: True = procura em templates/ dentro de cada app
+# Context processors: funções que injetam variáveis em TODOS os templates
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -71,10 +103,11 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'core.wsgi.application'
 
-
-# Database
-# https://docs.djangoproject.com/en/6.0/ref/settings/#databases
-
+# ─── DATABASE — MySQL ─────────────────────────────────────────────────
+# Todas as credenciais vêm do ambiente (.env ou variáveis do Docker).
+# ENGINE: django.db.backends.mysql → usa o mysqlclient como driver nativo.
+# HOST: dentro do Docker, o nome do serviço (db) resolve via DNS interno.
+# PORT: 3306 é a porta padrão do MySQL.
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
@@ -86,12 +119,19 @@ DATABASES = {
     }
 }
 
-# User data model
+# ─── CUSTOM USER MODEL ────────────────────────────────────────────────
+# Diz ao Django para usar nosso modelo User (em users/models.py) em vez
+# do modelo padrão django.contrib.auth.models.User.
+# CRÍTICO: deve ser definido ANTES da primeira migração do projeto.
+# Depois que o banco já foi criado, migrar é complexo e arriscado.
 AUTH_USER_MODEL = 'users.User'
 
-# Password validation
-# https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
-
+# ─── PASSWORD VALIDATION ──────────────────────────────────────────────
+# Conjunto de validadores que o Django aplica ao criar/alterar senhas.
+# UserAttributeSimilarity  →  senha não pode ser muito parecida com atributos do usuário
+# MinimumLengthValidator   →  tamanho mínimo (padrão: 8 caracteres)
+# CommonPasswordValidator  →  rejeita senhas comuns (123456, password, etc.)
+# NumericPasswordValidator →  rejeita senhas puramente numéricas
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -107,24 +147,24 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
-# Internationalization
-# https://docs.djangoproject.com/en/6.0/topics/i18n/
-
+# ─── INTERNATIONALIZATION ─────────────────────────────────────────────
+# LANGUAGE_CODE: idioma padrão do Django (usado em traduções, formatos de data, admin)
+# TIME_ZONE: fuso horário do projeto (UTC = padrão, sem horário de verão)
+# USE_I18N: ativa sistema de tradução do Django
+# USE_TZ: armazena datas em UTC no banco, converte para TIME_ZONE ao exibir
 LANGUAGE_CODE = 'pt-br'
-
 TIME_ZONE = 'UTC'
-
 USE_I18N = True
-
 USE_TZ = True
 
-
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/6.0/howto/static-files/
-
+# ─── STATIC & MEDIA FILES ─────────────────────────────────────────────
+# STATIC_URL: URL base para arquivos CSS, JS, imagens do desenvolvedor.
+#   Em produção: python manage.py collectstatic → copia tudo para STATIC_ROOT.
+#
+# MEDIA_URL / MEDIA_ROOT: arquivos enviados PELOS USUÁRIOS (uploads de fotos, PDFs, etc.).
+#   MEDIA_ROOT: caminho NO DISCO onde os arquivos são salvos.
+#   MEDIA_URL:  URL base para acessar os arquivos (ex: /media/foto.jpg).
+#   Diferença: static = seus assets | media = uploads do usuário.
 STATIC_URL = 'static/'
-
-# Uploaded media files dir
-MEDIA_DIR = '/media/'
+MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')

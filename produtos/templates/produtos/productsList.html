@@ -1,12 +1,53 @@
-{% extends 'base.html' %} {% block title %} Vitrine de Produtos {% endblock %}
+{% extends 'base.html' %}
+
+{% comment %}
+┌──────────────────────────────────────────────────────────────────────┐
+│ TEMPLATE — Lista de Produtos                                         │
+│                                                                      │
+│ {% extends 'base.html' %}                                            │
+│   → Herda a estrutura do base.html e substitui os blocks             │
+│                                                                      │
+│ {% for item in list %}...{% empty %}...{% endfor %}                  │
+│   → Itera sobre um QuerySet/lista                                    │
+│   → empty: executado se a lista estiver VAZIA                        │
+│                                                                      │
+│ {% url 'nome_da_rota' parametro %}                                   │
+│   → Resolve a URL pelo name definido em urls.py                      │
+│   → Se a rota mudar, só altera em urls.py — template se adapta       │
+│                                                                      │
+│ Filtros:                                                             │
+│   {{ valor|floatformat:2 }}  → formata número decimal com 2 casas    │
+│   {{ valor|date:"d/m/Y" }}   → formata data no padrão brasileiro     │
+│   {{ valor|default:"N/A" }}  → exibe fallback se valor for vazio     │
+│   {{ valor|upper }}          → texto em maiúsculas                   │
+│   {{ valor|lower }}          → texto em minúsculas                   │
+│   {{ valor|length }}         → tamanho da string/lista               │
+│                                                                      │
+│ {% if condition %}...{% endif %} → condicional no template           │
+│                                                                      │
+│ CSRF (Cross-Site Request Forgery):                                   │
+│   {% csrf_token %} dentro de <form method="POST">                    │
+│   → Token único por sessão, validado no servidor                     │
+│   → Sem ele, Django rejeita o POST com erro 403                      │
+│   → Protege contra: site malicioso que envia req em nome do usuário  │
+└──────────────────────────────────────────────────────────────────────┘
+{% endcomment %}
+
+{% block title %} Vitrine de Produtos {% endblock %}
 
 {% block content %}
   <h1>Nossos Produtos</h1>
   <ul>
     {% for product in products_list %}
+      {# Condicional: destaca produtos com estoque baixo (< 5) #}
       <li class="{% if product.stock < 5 %}alert-stock{% endif %}">
-        <a href="{% url 'product_detail' product.pk %}">{{ product.name }}</a> - Estoque: {{ product.stock }} - Preço: R$ {{ product.price|floatformat:2}}
+        <a href="{% url 'product_detail' product.pk %}">{{ product.name }}</a>
+        - Estoque: {{ product.stock }}
+        - Preço: R$ {{ product.price|floatformat:2 }}
       </li>
+    {% empty %}
+      {# Executado quando products_list está vazio #}
+      <li>Nenhum produto cadastrado</li>
     {% endfor %}
   </ul>
-  {% endblock %}
+{% endblock %}
