@@ -1,3 +1,49 @@
+🚀 Django Commerce Backend - Learning Project
+
+Este repositório foi desenvolvido com o propósito de consolidar conceitos avançados de engenharia de software e backend utilizando o ecossistema Django, integrado ao banco de dados MySQL sob infraestrutura containerizada com Docker.
+
+O objetivo principal deste projeto não é apenas construir mais um e-commerce, mas sim dominar os padrões de mercado, boas práticas de arquitetura, otimização de consultas e segurança que diferenciam um desenvolvedor júnior de um profissional pronto para o mercado internacional.
+🎯 Objetivos de Aprendizado Conquistados
+1. Infraestrutura e Ambientes Isolados
+
+    Docker & Docker Compose: Todo o ambiente (aplicação Python + banco de dados MySQL) roda de forma isolada em containers, garantindo a paridade entre os ambientes de desenvolvimento e produção.
+
+    Segurança de Configuração: Separação estrita entre código e credenciais sensíveis através do uso de variáveis de ambiente (.env) gerenciadas pelo python-dotenv.
+
+2. Arquitetura de Dados de Alta Performance
+
+    Padrão Internacional: Todo o código-fonte, tabelas, campos e relacionamentos foram padronizados em inglês, mantendo a interface de gerenciamento internacionalizada em português para o usuário final através de metadados (verbose_name).
+
+    Segurança por Design (UUIDs): Substituição de IDs sequenciais (1, 2, 3...) por identificadores únicos universais (UUIDv4) nas chaves primárias dos modelos (Product, Category, User), mitigando vulnerabilidades do tipo IDOR (Insecure Direct Object Reference).
+
+    Custom User Model: Substituição do modelo de autenticação padrão do Django por uma classe customizada herdada de AbstractUser logo no início do projeto, preparando o ecossistema para autenticação via e-mail e extensões futuras de perfil (CPF, Foto).
+
+3. Maestria no Django ORM & Banco de Dados (MySQL)
+
+    Guerra ao Problema N+1: Implementação de técnicas de otimização de consultas utilizando select_related para realizar JOINs diretamente no banco, reduzindo drasticamente a carga de processamento no MySQL.
+
+    Queries Complexas: Uso avançado de encadeamento de QuerySets, filtros textuais/numéricos e lógicas condicionais do tipo OR utilizando Q objects.
+
+    Ciclo de Vida e Sinais (Signals): Interceptação de eventos no banco de dados através de gatilhos como pre_save para automatizar tarefas de consistência de dados (como geração de Slugs em inglês), independente de onde a requisição venha (Painel Admin ou API externa).
+
+4. Segurança Web
+
+    Proteção CSRF: Entendimento profundo sobre ataques de falsificação de requisições (Cross-Site Request Forgery) e como o ecossistema protege rotas de escrita através de Tokens dinâmicos (via Django Templates e Headers customizados).
+
+🛠️ Stack Tecnológica Utilizada
+
+    Linguagem: Python 3.11+
+
+    Framework: Django 5+
+
+    Banco de Dados: MySQL 8
+
+    Ferramentas de Desenvolvimento: IPython & Django Extensions (shell_plus)
+
+    Containerização: Docker & Docker Compose
+
+Este projeto serve como um portfólio vivo da minha evolução técnica na stack Python/Django.
+
 # Referência ORM Django
 
 Guia de consulta rápida para o **Object-Relational Mapping (ORM)** do Django — a camada que traduz classes Python em tabelas SQL e vice-versa.
