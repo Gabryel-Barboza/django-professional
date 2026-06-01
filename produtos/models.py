@@ -32,6 +32,7 @@ class Category(models.Model):
       - Unicidade global: impossível colidir entre tabelas ou sistemas diferentes
       - Ofuscação: atacantes não conseguem "adivinhar" IDs sequenciais
     """
+
     uuid = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField('Categoria', max_length=100)
     slug = models.SlugField(unique=True)
@@ -72,16 +73,21 @@ class Product(models.Model):
 
     related_name: nome da "relação reversa" na API do ORM.
       Ex: categoria = Category.objects.first()
-          categoria.categories.all()  →  produtos daquela categoria
+          categoria.products.all()  →  produtos daquela categoria
       Se omitido, o Django cria: categoria.product_set.all()
     """
+
     uuid = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     category = models.ForeignKey(
         Category,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='categories',
+        related_name='products',
+    )
+    # As imagens serão salvas em: media/produtos/ANO/MES/DIA/
+    image = models.ImageField(
+        'Imagem do Produto', upload_to='produtos/%Y/%m/%d', blank=True, null=True
     )
     name = models.CharField('Nome do Produto', max_length=200)
     price = models.DecimalField('Preço', max_digits=10, decimal_places=2)

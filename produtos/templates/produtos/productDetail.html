@@ -21,13 +21,13 @@
 
 {% block content %}
   <a href="{% url 'products_list' %}">← Voltar para a lista</a>
+  <img src="{{ product.image.url }}" alt="Imagem de {{ product.name }}" width="200" />
   <h1>{{ product.name }}</h1>
   <p><strong>Preço:</strong> {{ product.price }}</p>
   <p><strong>Categoria:</strong> {{ product.category.name }}</p>
   <p><strong>Adicionado em:</strong> {{ product.created_at|date:"d/m/Y" }}</p>
 
-  <div class="uuid-info">
-    {# pk = primary key (UUID). Exibido completo para referência #}
-    <small>Identificador: {{ product.pk }}</small>
+  <div class="uuid-info" id="uuid-copy" data-uuid="{{ product.pk }}" style="cursor: pointer;" title="Clique para copiar">
+    <small>Identificador: 📋 <span>{{ product.pk }}</span></small>
   </div>
 {% endblock %}

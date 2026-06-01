@@ -37,16 +37,21 @@
 
 {% block content %}
   <h1>Nossos Produtos</h1>
+
+  <div style="margin-bottom: 1.5rem;">
+    <input type="text" id="search-product" placeholder="Digite para buscar um produto..." 
+           style="width: 100%; max-width: 400px; padding: 10px; border-radius: 6px; border: 1px solid #ccc; font-size: 1rem;">
+  </div>
+
   <ul>
     {% for product in products_list %}
-      {# Condicional: destaca produtos com estoque baixo (< 5) #}
-      <li class="{% if product.stock < 5 %}alert-stock{% endif %}">
-        <a href="{% url 'product_detail' product.pk %}">{{ product.name }}</a>
+      <li class="product-list-item {% if product.stock < 5 %}alert-stock{% endif %}">
+        <img src="{{ product.image.url }}" alt="Imagem de {{ product.name }}" width="100" />
+        <a href="{% url 'product_detail' product.pk %}" class="product-link">{{ product.name }}</a>
         - Estoque: {{ product.stock }}
         - Preço: R$ {{ product.price|floatformat:2 }}
       </li>
     {% empty %}
-      {# Executado quando products_list está vazio #}
       <li>Nenhum produto cadastrado</li>
     {% endfor %}
   </ul>

@@ -39,7 +39,7 @@ from .models import User
 class CustomUserAdmin(UserAdmin):
     list_display = ('email', 'username', 'cpf')
     search_fields = ('email', 'username', 'cpf')
-    ordering = 'email'
+    ordering = ('email',)
 
     # fieldsets: agrupa campos no formulário de EDIÇÃO de usuário
     fieldsets = (

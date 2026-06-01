@@ -45,7 +45,7 @@ class ProductAdmin(admin.ModelAdmin):
     # pode ser usado como coluna em list_display.
     # obj é a instância do modelo (Product).
     def get_short_id(self, obj):
-        return str(obj.id)[:8]  # mostra só os 8 primeiros caracteres do UUID
+        return str(obj.uuid)[:8]  # mostra só os 8 primeiros caracteres do UUID
 
     # short_description: legenda da coluna no admin (em português)
     get_short_id.short_description = 'ID Reduzido'

@@ -324,7 +324,7 @@ Adiciona uma coluna **virtual** a CADA objeto do `QuerySet`:
 from django.db.models import Count
 
 categorias = Category.objects.annotate(
-    total_produtos=Count('categories')  # 'categories' = related_name de Product
+    total_produtos=Count('products')  # 'products' = related_name de Product
 )
 
 for cat in categorias:
@@ -332,7 +332,7 @@ for cat in categorias:
 
 # Preço médio por categoria
 categorias = Category.objects.annotate(
-    preco_medio=Avg('categories__price')
+    preco_medio=Avg('products__price')
 )
 ```
 
@@ -377,9 +377,9 @@ def buscar(request):
 # ─── CENÁRIO 3: Relatório de estoque ─────────────────────────────────
 def relatorio(request):
     categorias = Category.objects.annotate(
-        total_produtos=Count('categories'),
-        valor_total=Sum('categories__price'),
-        estoque_total=Sum('categories__stock'),
+        total_produtos=Count('products'),
+        valor_total=Sum('products__price'),
+        estoque_total=Sum('products__stock'),
     ).order_by('-total_produtos')
 
     return render(request, 'relatorio.html', {'categorias': categorias})

@@ -25,11 +25,13 @@ SINAIS (Signals) — Django
 └──────────────────────────────────────────────────────────────────────┘
 """
 
-from django.db.models.signals import pre_save
+import os
+
+from django.db.models.signals import post_delete, pre_save
 from django.dispatch import receiver
 from django.utils.text import slugify
 
-from .models import Category
+from .models import Category, Product
 
 
 @receiver(pre_save, sender=Category)
@@ -41,3 +43,14 @@ def generate_category_slug(sender, instance, **kwargs):
     """
     if not instance.slug:
         instance.slug = slugify(instance.name)
+
+
+@receiver(post_delete, sender=Product)
+def remove_product_image(sender, instance, **kwargs):
+    """
+    Remove automaticamente arquivos de imagem salvos para o produto que foi excluído.
+    """
+
+    if instance.image:
+        if os.path.isfile(instance.image.path):
+            os.remove(instance.image.path)
