@@ -29,7 +29,7 @@ urlpatterns = [
     # admin.site.urls já vem com todas as views prontas (login, logout, CRUD)
     path('admin/', admin.site.urls),
     # Tudo que começa com /produtos/ é delegado ao app produtos
-    path('produtos/', include('produtos.urls')),
+    path('products/', include('produtos.urls')),
 ]
 
 # Se em ambiente de desenvolvimento, adicionar URL para arquivos estáticos locais.

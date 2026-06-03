@@ -44,10 +44,23 @@
   </div>
 
   <ul>
+    {# ─── RENDERIZAÇÃO DE RELACIONAMENTOS ───────────────────────── #}
+    {# product.category.name → ACESSANDO FK NO TEMPLATE              #}
+    {#   → Requer select_related('category') na view para evitar N+1 #}
+    {#   → Sem select_related, cada iteração gera 1 query extra!     #}
+    {#                                                               #}
+    {# product.image.url → ARQUIVO DE MÍDIA (upload do usuário)      #}
+    {#   → Se image for null (blank=True), product.image.url         #}
+    {#     lança AttributeError! Use {% if product.image %}          #}
+    {#     para verificar se existe antes de renderizar.             #}
     {% for product in products_list %}
       <li class="product-list-item {% if product.stock < 5 %}alert-stock{% endif %}">
-        <img src="{{ product.image.url }}" alt="Imagem de {{ product.name }}" width="100" />
+        {# Verifica se o produto tem imagem antes de exibir #}
+        {% if product.image %}
+          <img src="{{ product.image.url }}" alt="Imagem de {{ product.name }}" width="100" />
+        {% endif %}
         <a href="{% url 'product_detail' product.pk %}" class="product-link">{{ product.name }}</a>
+        - Categoria: {{ product.category.name|default:"Sem categoria" }}
         - Estoque: {{ product.stock }}
         - Preço: R$ {{ product.price|floatformat:2 }}
       </li>

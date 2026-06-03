@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+
+{% comment %}
+┌──────────────────────────────────────────────────────────────────────┐
+│ TEMPLATE — Criação de Produto (Formulário)                          │
+│                                                                      │
+│ enctype="multipart/form-data":                                       │
+│   → OBRIGATÓRIO se o formulário tem input type="file" (imagens)    │
+│   → Sem isso, o arquivo não é enviado (request.FILES fica vazio)   │
+│                                                                      │
+│ {% csrf_token %}                                                     │
+│   → Gera input hidden com token CSRF                                │
+│   → Django rejeita POST sem token (erro 403)                        │
+│   → Proteção contra Cross-Site Request Forgery                      │
+│                                                                      │
+│ {{ form.as_p }}                                                      │
+│   → Renderiza todos os campos do formulário dentro de <p> tags     │
+│   → Alternativas: form.as_table, form.as_ul, ou campo por campo     │
+│   → Cada campo já inclui: label, input, erros de validação         │
+│                                                                      │
+│ {{ form.nome.errors }} → exibe erros de validação de UM campo      │
+│ {{ form.non_field_errors }} → exibe erros do clean() (multi-campo) │
+└──────────────────────────────────────────────────────────────────────┘
+{% endcomment %}
+
+{% block content %}
+  <div>
+    <h1>Cadastrar Produto</h1>
+    <form method="POST" enctype="multipart/form-data">
+      {% csrf_token %}
+
+      {# Renderiza todos os campos com labels e erros #}
+      {{ form.as_p }}
+
+      {# Exibe erros de validação multi-campo (do clean()) #}
+      {{ form.non_field_errors }}
+
+      <button type="submit">Enviar</button>
+    </form>
+  </div>
+{% endblock %}

@@ -390,3 +390,280 @@ def zerar_estoque(request, categoria_uuid):
     Product.objects.filter(category=categoria).update(stock=0)
     return redirect('relatorio')
 ```
+
+---
+
+## 9. `prefetch_related()` — O irmão do `select_related()` para M2M e Relações Reversas
+
+```python
+from django.db.models import Prefetch
+```
+
+### select_related vs prefetch_related
+
+| Característica | `select_related()` | `prefetch_related()` |
+|---|---|---|
+| **Tipo de relação** | FK direta (1:1, N:1) | M2M, FK reversa (1:N) |
+| **Estratégia** | `JOIN` SQL (uma query) | Query separada + combinação em Python |
+| **Performance** | Excelente para FKs diretas | Excelente para coleções reversas |
+| **Exemplo** | `product.category` | `category.products.all` |
+
+### O problema N+1 reverso
+
+```python
+# ISSO é N+1 — cada categoria faz uma query extra pelos produtos:
+categorias = Category.objects.all()                # 1 query
+for cat in categorias:
+    print(cat.products.all())                      # +N queries (uma por categoria)
+# Total: 1 + N queries
+```
+
+### A solução
+
+```python
+# prefetch_related carrega TUDO em 2 queries no total:
+categorias = Category.objects.prefetch_related('products').all()  # 2 queries
+for cat in categorias:
+    print(cat.products.all())  # 0 queries extras (já está na memória)
+# Total: 2 queries (1 p/ categorias + 1 p/ todos os produtos)
+```
+
+### Combinando `select_related()` + `prefetch_related()`
+
+```python
+# Cenário real: categorias com produtos, cada produto com sua categoria
+categorias = Category.objects.prefetch_related(
+    Prefetch(
+        'products',
+        queryset=Product.objects.select_related('category')
+    )
+).all()
+```
+
+### prefetch_related com filtros (usando `Prefetch`)
+
+```python
+from django.db.models import Prefetch
+
+# Carrega apenas produtos com estoque > 0
+categorias = Category.objects.prefetch_related(
+    Prefetch(
+        'products',
+        queryset=Product.objects.filter(stock__gt=0),
+        to_attr='produtos_disponiveis'  # nome do atributo no objeto
+    )
+).all()
+
+for cat in categorias:
+    # cat.produtos_disponiveis → lista filtrada (não é QuerySet!)
+    for p in cat.produtos_disponiveis:
+        print(p.name)
+```
+
+---
+
+## 10. `F()` Expressions — Operações no Banco (Atomicidade)
+
+```python
+from django.db.models import F
+```
+
+### O problema: Race Condition
+
+```python
+# ISSO NÃO É SEGURO em sistemas concorrentes:
+for p in produtos:
+    p.stock = p.stock - quantidade_comprada
+    p.save()
+
+# Problema: se 2 usuários compram ao mesmo tempo:
+# Usuário A lê stock=10, Usuário B lê stock=10
+# A salva stock=5, B salva stock=5 (perdeu uma venda!)
+```
+
+### A solução: `F()` delega o cálculo para o MySQL
+
+```python
+# F() expression: o cálculo acontece NO BANCO, não na memória do Python
+from django.db.models import F
+
+# UPDATE produtos_product SET stock = stock - 2
+Product.objects.filter(uuid=produto.uuid).update(stock=F('stock') - 2)
+
+# Vantagens:
+#   1. Atômico: o banco trava a linha durante a operação
+#   2. Rápido: não carrega objeto na memória (1 query apenas)
+#   3. Sem race condition: o MySQL processa sequencialmente
+```
+
+### Outros usos de `F()`
+
+```python
+# Aumentar preço em 10% para todos os produtos
+Product.objects.update(price=F('price') * 1.10)
+
+# Comparar campos entre si
+Product.objects.filter(stock=F('stock_anterior'))  # stock = stock_anterior
+
+# Em filter também funciona
+Product.objects.filter(stock__lt=F('stock_maximo'))
+
+# Com anotações
+from django.db.models import F, Value
+from django.db.models.functions import Concat
+
+Product.objects.annotate(
+    nome_e_categoria=Concat(F('name'), Value(' - '), F('category__name'))
+)
+```
+
+---
+
+## 11. `Case/When` — Lógica Condicional Direto no SQL
+
+```python
+from django.db.models import Case, When, Value, IntegerField, CharField
+```
+
+### Classificação condicional (IF/ELSE no banco)
+
+```python
+from django.db.models import Case, When, Value, CharField
+
+# Cria coluna 'status_estoque' com texto classificado
+produtos = Product.objects.annotate(
+    status_estoque=Case(
+        When(stock=0, then=Value('Esgotado')),
+        When(stock__lt=5, then=Value('Estoque Crítico')),
+        When(stock__lt=20, then=Value('Estoque Baixo')),
+        default=Value('Estoque OK'),
+        output_field=CharField(),
+    )
+)
+
+for p in produtos:
+    print(f'{p.name}: {p.status_estoque}')
+    # → "Camiseta Python: Estoque OK"
+    # → "Teclado Mecânico: Estoque Crítico"
+```
+
+### Case/When com números (cálculo de faixas)
+
+```python
+from django.db.models import Case, When, Value, IntegerField
+
+# Faixa de preço (categorização)
+produtos = Product.objects.annotate(
+    faixa_preco=Case(
+        When(price__lt=50, then=Value(1)),    # Barato
+        When(price__lt=150, then=Value(2)),   # Médio
+        When(price__lt=500, then=Value(3)),   # Caro
+        default=Value(4),                      # Premium
+        output_field=IntegerField(),
+    )
+)
+
+# Ordenar por faixa de preço (do mais barato ao mais caro)
+produtos = produtos.order_by('faixa_preco', 'price')
+
+# Agrupar por faixa
+from django.db.models import Count
+faixas = produtos.values('faixa_preco').annotate(total=Count('id'))
+```
+
+### Por que fazer no banco vs no Python?
+
+| No Python | No SQL (Case/When) |
+|---|---|
+| Carrega todos os objetos na memória | Só o resultado |
+| Processamento serial (1 core) | Paralelo no banco |
+| O(N) operações em RAM | O(N) no banco (mais eficiente) |
+| Ideal para poucos registros | Ideal para MUITOS registros |
+
+---
+
+## 12. Renderizando Relações no Template (Loops Aninhados)
+
+Quando você tem uma relação N:1 e precisa exibir dados relacionados no template, existem duas abordagens:
+
+### Abordagem 1: Uma FK com `select_related` (mais comum)
+
+```python
+# view
+produtos = Product.objects.select_related('category').all()
+```
+
+```html
+{# template #}
+<ul>
+  {% for product in products %}
+    <li>
+      {{ product.name }}
+      {# 🔁 product.category JÁ está carregado (select_related) #}
+      <small>Categoria: {{ product.category.name }}</small>
+    </li>
+  {% endfor %}
+</ul>
+```
+
+### Abordagem 2: Lista de categorias com produtos dentro (relação reversa)
+
+```python
+# view
+categorias = Category.objects.prefetch_related('products').all()
+```
+
+```html
+{# template — loop aninhado #}
+{% for category in categorias %}
+  <h2>{{ category.name }}</h2>
+  <ul>
+    {# category.products.all → já está em memória (prefetch_related) #}
+    {# Sem prefetch_related, cada iteração faria 1 query extra!     #}
+    {% for product in category.products.all %}
+      <li>{{ product.name }} — R$ {{ product.price|floatformat:2 }}</li>
+    {% empty %}
+      <li>Nenhum produto nesta categoria</li>
+    {% endfor %}
+  </ul>
+{% endfor %}
+```
+
+### Regra de Ouro para Templates com Relacionamentos
+
+> **Se você acessa `objeto.relacionamento` dentro de um `{% for %}` no template,
+> você PRECISA de `select_related()` (FK direta) ou `prefetch_related()` (FK reversa/M2M)
+> na view. Caso contrário, cada iteração gera uma query = N+1.**
+
+### Consulta de performance no Django Debug Toolbar
+
+```python
+# Adicione ao INSTALLED_APPS (apenas em dev):
+INSTALLED_APPS += ['debug_toolbar']
+
+# Ele mostra:
+# ✔ Quantas queries foram executadas
+# ✔ Quanto tempo cada query levou
+# ✔ Se há queries duplicadas (N+1)
+# ✔ O SQL de cada query
+```
+
+---
+
+## 13. Índice de Referência Rápida
+
+| Operação | Método | SQL gerado |
+|---|---|---|
+| Buscar todos | `.all()` | `SELECT * FROM ...` |
+| Filtrar | `.filter(campo=valor)` | `WHERE campo = valor` |
+| Um objeto | `.get(pk=1)` | `WHERE id = 1 LIMIT 1` |
+| OR lógico | `Q(a=1) \| Q(b=2)` | `WHERE a = 1 OR b = 2` |
+| NOT | `~Q(campo=valor)` | `WHERE NOT campo = valor` |
+| JOIN FK | `.select_related('fk')` | `LEFT JOIN ... ON ...` |
+| Pré-carregar reverso | `.prefetch_related('nome_set')` | 2 queries |
+| Atualizar lote | `.update(campo=valor)` | `UPDATE ... SET ...` |
+| Agregar | `.aggregate(Sum('campo'))` | `SELECT SUM(...)` |
+| Anotar | `.annotate(Count('rel'))` | `GROUP BY ...` |
+| Operação atômica | `F('campo') + 1` | `campo = campo + 1` |
+| Condicional SQL | `Case/When` | `CASE WHEN ... END` |
+

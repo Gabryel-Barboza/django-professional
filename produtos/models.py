@@ -26,11 +26,20 @@ class Category(models.Model):
     """
     ─── UUID como Primary Key ─────────────────────────────────────────
     Em vez do auto-increment padrão (id = Integer), usamos UUID (128 bits).
-    Vantagens:
-      - Segurança: não expõe quantidade de registros (ex: /produto/3 vs /produto/a47b...)
+
+    🛡️ MITIGAÇÃO DE ATAQUES IDOR (Insecure Direct Object Reference):
+    IDOR ocorre quando um atacante MANIPULA um identificador na URL para
+    acessar recursos não autorizados. Exemplo clássico com IDs sequenciais:
+      /usuario/3 → atacante troca para /usuario/4 e vê dados de outro usuário
+
+    UUID resolve isso porque:
+      - Impossível "adivinhar" URLs válidas (/produto/a47b... vs /produto/5)
+      - Não expõe a quantidade total de registros na base
+      - Geração descentralizada (não precisa de sequence, sem contenção)
+
+    Outras vantagens:
       - Escalabilidade: geração descentralizada (não precisa de sequence no banco)
       - Unicidade global: impossível colidir entre tabelas ou sistemas diferentes
-      - Ofuscação: atacantes não conseguem "adivinhar" IDs sequenciais
     """
 
     uuid = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

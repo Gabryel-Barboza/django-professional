@@ -24,11 +24,19 @@ URLs do App Produtos
 
 from django.urls import path
 
-from .views import get_product_detail, list_products
+from .views import (
+    ProductsListView,
+    create_product_view,
+    get_product_detail,
+    list_products,
+)
 
 urlpatterns = [
     path('', list_products, name='products_list'),
     # <uuid:pk> captura um UUID da URL e converte para objeto uuid.UUID
     # Se a URL não for um UUID válido, retorna 404 automaticamente
     path('product/<uuid:pk>', get_product_detail, name='product_detail'),
+    path('product/create', create_product_view, name='create_product'),
+    # Usando CBVs
+    path('cbv-products', ProductsListView.as_view(), name='cbv_products_list'),
 ]
