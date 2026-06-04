@@ -1,94 +1,92 @@
 """
-VIEWS — Lógica de Negócio (MVT)
+DRF VIEWS — Lógica de API (REST)
 
 ┌──────────────────────────────────────────────────────────────────────┐
-│ Funções abaixo recebem um HttpRequest e retornam um HttpResponse.    │
-│ O Django injeta automaticamente a request vinda do roteamento (URL). │
+│ PARADIGMA STATELESS (MVT → REST API)                                │
 │                                                                      │
-│ render() = shortcut que:                                             │
-│   1. Carrega o template                                              │
-│   2. Preenche com o context dict                                     │
-│   3. Retorna um HttpResponse pronto                                  │
+│ No MVT tradicional (master):                                         │
+│   View renderiza HTML + Template → resposta HTML                    │
+│   Estado fica na sessão (cookie)                                    │
+│   Servidor mantém estado do cliente                                 │
 │                                                                      │
-│ FLASH MESSAGES (Sistema de Mensagens Nativo):                       │
-│   from django.contrib import messages                               │
-│   messages.success(request, 'texto')  → alerta verde (success)     │
-│   messages.warning(request, 'texto') → alerta amarelo (warning)    │
-│   messages.error(request, 'texto')   → alerta vermelho (error)     │
-│   messages.info(request, 'texto')    → alerta azul (info)          │
+│ No REST (esta branch):                                               │
+│   View retorna JSON PURO → sem sessão, sem estado                  │
+│   Cada requisição contém TUDO que o servidor precisa                │
+│   O cliente (React, mobile, Postman) é responsável pela UI          │
+│   Autenticação via JWT (token no header Authorization)              │
 │                                                                      │
-│   As mensagens são armazenadas na sessão e exibidas UMA ÚNICA vez   │
-│   no template (efêmeras — somem após o primeiro render).            │
-│   No template: {% for message in messages %}...{{ message }}...     │
+│ Isso é STATELESS: o servidor não "lembra" de nada entre requests.   │
 └──────────────────────────────────────────────────────────────────────┘
 """
 
-from django.contrib import messages
-from django.shortcuts import get_object_or_404, redirect, render
-from django.views.generic import ListView
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import status
+from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.permissions import IsAuthenticatedOrReadOnly
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework.viewsets import ModelViewSet
 
-from .forms import ProductForm
 from .models import Product
+from .serializers import ProductSerializer
 
 
-def list_products(request):
-    products = Product.objects.all()
-    context = {'products_list': products, 'title': 'Nossa Vitrine'}
-    return render(request, 'produtos/productsList.html', context)
+class ProductListAPIView(APIView):
+    """
+    ─── APIView — View baseada em classe para REST ──────────────────
+    Cada método HTTP vira um método Python: get(), post(), put(), delete().
+    Diferente das FBV do Django, aqui retornamos Response(JSON) em vez de render(HTML).
+
+    ─── many=True ───────────────────────────────────────────────────
+    many=True  →  o serializer espera um QuerySet/lista → JSON array [...]
+    many=False →  o serializer espera UM objeto → JSON objeto {...}
+    Erro comum: passar many=True para um único objeto ou vice-versa.
+    """
+    def get(self, request):
+        products = Product.objects.select_related('category').all()
+        # many=True porque products é um QuerySet (coleção de objetos)
+        serializer = ProductSerializer(products, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        # Sem many=True porque request.data representa UM produto
+        serializer = ProductSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status.HTTP_201_CREATED)
+        return Response(serializer.errors, status.HTTP_400_BAD_REQUEST)
 
 
-def get_product_detail(request, pk):
-    product = get_object_or_404(Product, pk=pk)
-    context = {'product': product}
-    return render(request, 'produtos/productDetail.html', context)
+class ProductViewSet(ModelViewSet):
+    """
+    ─── ModelViewSet — CRUD completo em poucas linhas ──────────────
+    Gera automaticamente 6 ações (endpoints):
+      list()           → GET    /products/
+      create()         → POST   /products/
+      retrieve()       → GET    /products/{pk}/
+      update()         → PUT    /products/{pk}/
+      partial_update() → PATCH  /products/{pk}/
+      destroy()        → DELETE /products/{pk}/
 
+    Equivalente a escrever 6 APIViews diferentes manualmente.
 
-def create_product_view(request):
-    if request.method == 'POST':
-        # Passamos os dados textuais (POST) e os arquivos/imagens (FILES) para o formulário
-        form = ProductForm(request.POST, request.FILES)
+    ─── permission_classes ─────────────────────────────────────────
+    IsAuthenticatedOrReadOnly:
+      GET (leitura)   → qualquer um (autenticado ou não)
+      POST/PUT/DELETE → apenas usuários autenticados (via JWT)
 
-        # is_valid() roda: validação de tipo → clean_<campo>() → clean()
-        if form.is_valid():
-            form.save()
+    ─── filter_backends ────────────────────────────────────────────
+    DjangoFilterBackend → filtro exato:  ?category=<uuid>
+    SearchFilter        → busca textual: ?search=termo
+    OrderingFilter      → ordenação:     ?ordering=price,-created_at
 
-            # ─── FLASH MESSAGE ───────────────────────────────────────
-            # messages.success() armazena na sessão uma mensagem que
-            # será exibida na PRÓXIMA requisição (após o redirect).
-            # A mensagem some depois de renderizada uma vez.
-            messages.success(request, 'Produto cadastrado com sucesso!')
+    Os filtros são aplicados automaticamente pelo DRF no queryset.
+    """
+    queryset = Product.objects.select_related('category').all()
+    serializer_class = ProductSerializer
+    permission_classes = (IsAuthenticatedOrReadOnly,)
 
-            return redirect('products_list')
-        else:
-            # Se o formulário for inválido, avisa o usuário
-            messages.error(
-                request,
-                'Erro ao cadastrar produto. Verifique os dados e tente novamente.',
-            )
-    else:
-        form = ProductForm()
-
-    return render(request, 'produtos/createProduct.html', {'form': form})
-
-
-# ─── Class-Based View (CBV) — ListView ──────────────────────────────
-# Vantagens sobre FBV: menos código boilerplate, métodos específicos
-# (get_queryset, get_context_data), reuso via mixins.
-# Desvantagem: menos explícito, curva de aprendizado maior.
-class ProductsListView(ListView):
-    model = Product
-    template_name = 'produtos/productsList.html'
-    context_object_name = 'products'
-
-    def get_queryset(self):
-        """Sobrescreve para adicionar select_related e evitar N+1."""
-        return Product.objects.select_related('category').all()
-
-    def get_context_data(self, **kwargs):
-        """Sobrescreve para injetar dados extras no contexto."""
-        from .models import Category
-
-        context = super().get_context_data(**kwargs)
-        context['total_categories'] = Category.objects.count()
-        context['title'] = 'Nossa Vitrine (CBV)'
-        return context
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['category']
+    search_fields = ['name', 'category__name']
+    ordering_fields = ['price', 'created_at']

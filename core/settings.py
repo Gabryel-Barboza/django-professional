@@ -11,44 +11,23 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 import os
+from datetime import timedelta
 from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
-# ─── Carrega .env antes de qualquer outra configuração ────────────────
-# load_dotenv() procura o arquivo .env na raiz do projeto (onde está manage.py)
-# e chama os.environ.setdefault() para cada variável.
-# Isso permite usar os.getenv() em todo o settings.py.
-# Se o .env não existir (ex: CI/CD), não quebra — apenas ignora.
 load_dotenv()
 
-# Constrói o caminho absoluto da raiz do projeto (um nível acima de core/)
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# ─── SECRET KEY ───────────────────────────────────────────────────────
-# Usada para assinar: sessões, tokens CSRF, cookies, mensagens flash.
-# Nunca compartilhar ou versionar. Se vazar, gere outra imediatamente.
-# Gere com: python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
-
-# Validação explícita com mensagem clara — evita o erro silencioso de None
 if not SECRET_KEY:
     raise ImproperlyConfigured('A variável de ambiente SECRET_KEY não foi encontrada!')
 
-# ─── DEBUG ────────────────────────────────────────────────────────────
-# True  → mostra stack traces detalhados (NUNCA em produção!)
-# False → páginas de erro genéricas (padrão de segurança)
-# Lendo de os.getenv com falloff 'False' e convertendo string para bool
 DEBUG = os.getenv('DJANGO_DEBUG', 'False') == 'True'
-
-# Domínios/Hosts permitidos para servir a aplicação.
-# Vazio = apenas localhost. Em produção: ['meudominio.com', 'www.meudominio.com']
 ALLOWED_HOSTS = []
 
-# ─── APPLICATION DEFINITION ───────────────────────────────────────────
-# A ordem importa: Django carrega os apps nesta sequência.
-# Apps do Django primeiro (admin, auth, etc.), depois apps do projeto.
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -57,20 +36,11 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django_extensions',
+    'rest_framework',
     'produtos',
     'users',
 ]
 
-# ─── MIDDLEWARE ───────────────────────────────────────────────────────
-# Pipeline de requisição/resposta. Cada middleware processa a request
-# na ordem de chegada e a response na ordem inversa.
-#   SecurityMiddleware          →  HTTPS redirect, HSTS, X-Content-Type-Options
-#   SessionMiddleware           →  gerencia sessões (cookie baseado ou server-side)
-#   CommonMiddleware           →  URL normalization (ex: /foo → /foo/)
-#   CsrfViewMiddleware         →  proteção contra CSRF (Cross-Site Request Forgery)
-#   AuthenticationMiddleware   →  associa request.user ao usuário logado
-#   MessageMiddleware          →  flash messages (mensagens entre requisições)
-#   XFrameOptionsMiddleware    →  proteção contra clickjacking (X-Frame-Options)
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -79,19 +49,20 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'core.middlewares.PerformanceLogMiddleware',  # Middleware customizado
+    'core.middlewares.PerformanceLogMiddleware',
 ]
 
 ROOT_URLCONF = 'core.urls'
 
-# ─── TEMPLATES ────────────────────────────────────────────────────────
-# DIRS: pastas GLOBAIS de templates (procura primeiro aqui)
-# APP_DIRS: True = procura em templates/ dentro de cada app
-# Context processors: funções que injetam variáveis em TODOS os templates
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'templates'],
+        # ─── API-FIRST ─────────────────────────────────────────────
+        # O diretório templates/ foi removido nesta branch.
+        # A aplicação migrou para REST API com DRF — o front-end
+        # (React) é desacoplado e consome JSON. Templates só existem
+        # para o admin do Django e apps de terceiros (APP_DIRS=True).
+        'DIRS': [],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -105,11 +76,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'core.wsgi.application'
 
-# ─── DATABASE — MySQL ─────────────────────────────────────────────────
-# Todas as credenciais vêm do ambiente (.env ou variáveis do Docker).
-# ENGINE: django.db.backends.mysql → usa o mysqlclient como driver nativo.
-# HOST: dentro do Docker, o nome do serviço (db) resolve via DNS interno.
-# PORT: 3306 é a porta padrão do MySQL.
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
@@ -121,52 +87,105 @@ DATABASES = {
     }
 }
 
-# ─── CUSTOM USER MODEL ────────────────────────────────────────────────
-# Diz ao Django para usar nosso modelo User (em users/models.py) em vez
-# do modelo padrão django.contrib.auth.models.User.
-# CRÍTICO: deve ser definido ANTES da primeira migração do projeto.
-# Depois que o banco já foi criado, migrar é complexo e arriscado.
 AUTH_USER_MODEL = 'users.User'
 
-# ─── PASSWORD VALIDATION ──────────────────────────────────────────────
-# Conjunto de validadores que o Django aplica ao criar/alterar senhas.
-# UserAttributeSimilarity  →  senha não pode ser muito parecida com atributos do usuário
-# MinimumLengthValidator   →  tamanho mínimo (padrão: 8 caracteres)
-# CommonPasswordValidator  →  rejeita senhas comuns (123456, password, etc.)
-# NumericPasswordValidator →  rejeita senhas puramente numéricas
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
-# ─── INTERNATIONALIZATION ─────────────────────────────────────────────
-# LANGUAGE_CODE: idioma padrão do Django (usado em traduções, formatos de data, admin)
-# TIME_ZONE: fuso horário do projeto (UTC = padrão, sem horário de verão)
-# USE_I18N: ativa sistema de tradução do Django
-# USE_TZ: armazena datas em UTC no banco, converte para TIME_ZONE ao exibir
+# ─────────────────────────────────────────────────────────────────────
+# DRF (Django REST Framework) — Configurações Globais da API
+# ─────────────────────────────────────────────────────────────────────
+# DEFAULT_AUTHENTICATION_CLASSES:
+#   Define o método de autenticação PADRÃO para TODOS os endpoints.
+#   JWTAuthentication → lê o token do header Authorization: Bearer <token>
+#   O Simple JWT se acopla ao django.contrib.auth — usa o User model
+#   configurado em AUTH_USER_MODEL para validar o token.
+#
+# DEFAULT_PAGINATION_CLASS:
+#   Toda listagem retorna autoaticamente:
+#   {
+#       "count": 150,         ← total de registros
+#       "next": "...page=3",  ← URL da próxima página (ou null)
+#       "previous": "...page=1", ← URL da página anterior (ou null)
+#       "results": [...]      ← dados da página atual
+#   }
+#   PAGE_SIZE: 20 itens por página.
+#
+# DEFAULT_FILTER_BACKENDS:
+#   Filtros habilitados globalmente. Cada ViewSet pode sobrescrever.
+#   - DjangoFilterBackend: filtro exato (?category=uuid)
+#   - SearchFilter: busca textual (?search=termo)
+#   - OrderingFilter: ordenação (?ordering=price,-created_at)
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 20,
+    'DEFAULT_FILTER_BACKENDS': (
+        'django_filters.rest_framework.DjangoFilterBackend',
+        'rest_framework.filters.SearchFilter',
+        'rest_framework.filters.OrderingFilter',
+    ),
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# SIMPLE JWT — Configuração de Tokens
+# ─────────────────────────────────────────────────────────────────────
+# ─── ANATOMIA DO JWT ──────────────────────────────────────────────
+# Todo JWT tem 3 partes separadas por ponto (.):
+#
+#   HEADER.PAYLOAD.SIGNATURE
+#
+# 1. HEADER (decodificado):
+#    {"alg": "HS256", "typ": "JWT"}
+#    → Algoritmo de assinatura (HMAC-SHA256)
+#
+# 2. PAYLOAD (decodificado):
+#    {"token_type": "access", "exp": 1717000000, "user_id": "...", ...}
+#    → Dados do usuário e metadados do token
+#
+# 3. SIGNATURE:
+#    HMAC-SHA256(base64url(header) + "." + base64url(payload), SECRET_KEY)
+#    → A SECRET_KEY do Django ASSINA o token
+#    → Se o payload for ALTERADO no cliente, a assinatura não confere
+#    → O servidor rejeita o token → acesso negado
+#
+# ─── ACCESS vs REFRESH (Estratégia de Mitigação) ────────────────
+# ACCESS_TOKEN_LIFETIME (60min):
+#   Token "da sessão". Enviado em toda requisição no header.
+#   Curto → se vazar, a janela de ataque é pequena.
+#
+# REFRESH_TOKEN_LIFETIME (7d):
+#   Token para obter NOVOS access tokens (via /api/token/refresh).
+#   Longo → evita que o usuário precise logar toda hora.
+#   Armazenado em local seguro (httpOnly cookie ou secure storage).
+#
+# ROTATE_REFRESH_TOKENS = True:
+#   Cada vez que o refresh é usado, UM NOVO refresh é gerado.
+#   O anterior é invalidado (se BLACKLIST_AFTER_ROTATION = True).
+#   Isso impede reuso de tokens roubados.
+#
+# Blacklist:
+#   Para usar, adicione 'rest_framework_simplejwt.token_blacklist'
+#   em INSTALLED_APPS e rode migrate.
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+}
+
+
 LANGUAGE_CODE = 'pt-br'
 TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
-# ─── STATIC & MEDIA FILES ─────────────────────────────────────────────
-# STATIC_URL: URL base para arquivos CSS, JS, imagens do desenvolvedor.
-#   Em produção: python manage.py collectstatic → copia tudo para STATIC_ROOT.
-#
-# MEDIA_URL / MEDIA_ROOT: arquivos enviados PELOS USUÁRIOS (uploads de fotos, PDFs, etc.).
-#   MEDIA_ROOT: caminho NO DISCO onde os arquivos são salvos.
-#   MEDIA_URL:  URL base para acessar os arquivos (ex: /media/foto.jpg).
-#   Diferença: static = seus assets | media = uploads do usuário.
 STATIC_URL = 'static/'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')

@@ -1,42 +1,42 @@
 """
-URLs do App Produtos
+URLs do App Produtos (REST API)
 
 ┌──────────────────────────────────────────────────────────────────────┐
-│ ROTEAMENTO POR APP                                                   │
-│ Cada app tem seu próprio urls.py, incluído pelo urls.py principal    │
-│ via include(). Isso organiza o projeto por domínio.                  │
+│ DefaultRouter — ROTEAMENTO AUTOMÁTICO para ViewSets                 │
 │                                                                      │
-│ CONVERSORES DE TIPO (path converters):                               │
-│   <str:param>    →  qualquer string (default)                        │
-│   <int:param>    →  apenas dígitos (converte para int)               │
-│   <slug:param>   →  slug (letras, nums, hífens, underscores)         │
-│   <uuid:param>   →  UUID válido (converte para uuid.UUID)            │
-│   <path:param>   →  qualquer string, incluindo /                     │
+│ Diferente de path() manual, o router.register() gera 6 URLs:        │
 │                                                                      │
-│ NAME: parâmetro essencial para usar {% url 'nome' arg %} no template │
-│ Se o name mudar, todos os templates que o usam precisam ser          │
-│ atualizados — escolha nomes descritivos e consistentes.              │
+│ Método  | Rota                              | Ação (ViewSet)        │
+│─────────|───────────────────────────────────|───────────────────────│
+│ GET     | /products/api/products/           | list()                │
+│ POST    | /products/api/products/           | create()              │
+│ GET     | /products/api/products/{uuid}/    | retrieve()            │
+│ PUT     | /products/api/products/{uuid}/    | update()              │
+│ PATCH   | /products/api/products/{uuid}/    | partial_update()      │
+│ DELETE  | /products/api/products/{uuid}/    | destroy()             │
 │                                                                      │
-│ ORDEM: Django testa as rotas de cima para baixo.                     │
-│ Coloque rotas mais específicas ANTES das genéricas.                  │
+│ basename='products' → as URLs são nomeadas como:                    │
+│   products-list, products-detail (para usar em reverse())           │
+│                                                                      │
+│ O router também gera um root view em /products/api/ listando        │
+│ todos os endpoints registrados (autodescobrimento da API).          │
 └──────────────────────────────────────────────────────────────────────┘
 """
 
-from django.urls import path
+from django.urls import include, path
+from rest_framework.routers import DefaultRouter
 
-from .views import (
-    ProductsListView,
-    create_product_view,
-    get_product_detail,
-    list_products,
-)
+from .views import ProductListAPIView, ProductViewSet
+
+# ─── Registra o ViewSet no router ──────────────────────────────────
+# O router "observa" o ViewSet e cria automaticamente as 6 URLs acima.
+# Se adicionar novos ViewSets, basta registrar aqui.
+router = DefaultRouter()
+router.register('products', ProductViewSet, basename='products')
 
 urlpatterns = [
-    path('', list_products, name='products_list'),
-    # <uuid:pk> captura um UUID da URL e converte para objeto uuid.UUID
-    # Se a URL não for um UUID válido, retorna 404 automaticamente
-    path('product/<uuid:pk>', get_product_detail, name='product_detail'),
-    path('product/create', create_product_view, name='create_product'),
-    # Usando CBVs
-    path('cbv-products', ProductsListView.as_view(), name='cbv_products_list'),
+    # APIView manual (GET + POST)
+    path('', ProductListAPIView.as_view(), name='products_list'),
+    # URLs automáticas do ViewSet (list, create, retrieve, update, partial_update, destroy)
+    path('api/', include(router.urls)),
 ]

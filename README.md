@@ -44,6 +44,488 @@ O objetivo principal deste projeto não é apenas construir mais um e-commerce, 
 
 Este projeto serve como um portfólio vivo da minha evolução técnica na stack Python/Django.
 
+---
+
+# Django REST Framework — Referência da API
+
+Guia de consulta rápida para o **Django REST Framework (DRF)** — o toolkit que transforma o Django MVT em uma REST API stateless com JSON puro.
+
+---
+
+## Índice
+
+- [1. REST & Paradigma Stateless](#1-rest--paradigma-stateless)
+- [2. ModelSerializers (O Funil de Dados)](#2-modelserializers-o-funil-de-dados)
+- [3. `many=True` — Objeto vs Coleção](#3-manytrue--objeto-vs-coleção)
+- [4. Anatomia do JWT (Header, Payload, Signature)](#4-anatomia-do-jwt-header-payload-signature)
+- [5. Access vs Refresh — Estratégia de Mitigação](#5-access-vs-refresh--estratégia-de-mitigação)
+- [6. Simple JWT + django.contrib.auth](#6-simple-jwt--djangocontribauth)
+- [7. ModelViewSet — CRUD em 3 Linhas](#7-modelviewset--crud-em-3-linhas)
+- [8. DefaultRouter — Roteamento Automático](#8-defaultrouter--roteamento-automático)
+- [9. Paginação Global](#9-paginação-global)
+- [10. Filtros Automatizados (django-filter)](#10-filtros-automatizados-django-filter)
+- [11. Writable Nested Serializers + transaction.atomic() + F()](#11-writable-nested-serializers--transactionatomic--f)
+
+---
+
+## 1. REST & Paradigma Stateless
+
+### Transição Mental: MVT → REST API
+
+| Característica | MVT (master) | REST API (esta branch) |
+|---|---|---|
+| **Resposta** | HTML renderizado | JSON puro |
+| **Estado** | Sessão no servidor (cookie) | Stateless (token JWT no header) |
+| **Cliente** | Django Templates | React, mobile, Postman |
+| **Autenticação** | Sessão + CSRF | JWT (Bearer token) |
+| **Rota típica** | `GET /produtos/` → HTML | `GET /products/api/products/` → JSON |
+
+### O que muda na prática
+
+```python
+# ─── ANTES (MVT) ────────────────────────────────────────────────────
+def list_products(request):
+    products = Product.objects.all()
+    return render(request, 'template.html', {'products': products})
+# → Resposta: HTML com dados misturados à apresentação
+
+# ─── DEPOIS (REST) ──────────────────────────────────────────────────
+class ProductListAPIView(APIView):
+    def get(self, request):
+        products = Product.objects.all()
+        serializer = ProductSerializer(products, many=True)
+        return Response(serializer.data)
+# → Resposta: JSON puro — o cliente decide como apresentar
+```
+
+**Princípio Stateless:** cada requisição HTTP contém TODA a informação necessária para o servidor processá-la (token JWT no header `Authorization: Bearer <token>`). O servidor não armazena estado algum sobre o cliente entre requisições.
+
+---
+
+## 2. ModelSerializers (O Funil de Dados)
+
+O **Serializer** é o tradutor entre objetos Python e JSON. Ele:
+
+1. **Serializa** (Python → JSON): converte QuerySet/Model em `dict` → JSON
+2. **Desserializa** (JSON → Python): valida JSON recebido → salva no banco
+3. **Valida**: `validate_<campo>()` e `validate()` (análogo ao `clean_<campo>()` do Django Forms)
+
+```python
+class ProductSerializer(serializers.ModelSerializer):
+    # Aninhamento (read-only): mostra dados da categoria DENTRO do JSON do produto
+    category = CategorySerializer(read_only=True)
+
+    class Meta:
+        model = Product
+        fields = ('uuid', 'name', 'price', 'stock', 'created_at', 'category')
+
+    # Validação em nível de campo (roda automaticamente no is_valid())
+    def validate_price(self, value):
+        if value > 50000:
+            raise serializers.ValidationError('Preço excede o limite máximo')
+        return value
+```
+
+### Campos mais comuns
+
+| Campo do Serializer | Uso |
+|---|---|
+| `CharField()`, `IntegerField()`, `DecimalField()` | Tipos básicos |
+| `SerializerMethodField()` | Campo calculado (método `get_<campo>()`) |
+| `PrimaryKeyRelatedField()` | FK exibida como UUID/ID |
+| `StringRelatedField()` | FK exibida como `__str__()` |
+| `SlugRelatedField()` | FK exibida por um slug/campo textural |
+
+---
+
+## 3. `many=True` — Objeto vs Coleção
+
+A confusão mais comum no DRF:
+
+```python
+# ❌ ERRADO: passar um QuerySet sem many=True
+serializer = ProductSerializer(Product.objects.all())  # TypeError!
+
+# ✅ CERTO: many=True para coleções
+serializer = ProductSerializer(Product.objects.all(), many=True)
+# → JSON: [{"uuid": "...", "name": "...", ...}, {...}]
+
+# ✅ CERTO: many=False (padrão) para UM objeto
+product = Product.objects.get(uuid='abc')
+serializer = ProductSerializer(product)  # many=False implícito
+# → JSON: {"uuid": "...", "name": "...", ...}
+```
+
+| `many=True` | `many=False` (padrão) |
+|---|---|
+| QuerySet / lista | Model / dict |
+| `[]` array no JSON | `{}` objeto no JSON |
+| `is_valid()` valida CADA item | `is_valid()` valida o único objeto |
+
+---
+
+## 4. Anatomia do JWT (Header, Payload, Signature)
+
+Todo JWT tem 3 partes separadas por ponto (`.`):
+
+```
+┌─────────────┐   ┌──────────────────────────┐   ┌──────────────────────────────┐
+│   HEADER    │   │         PAYLOAD           │   │         SIGNATURE            │
+│             │   │                          │   │                              │
+│ {           │   │ {                        │   │ HMAC-SHA256(                 │
+│   "alg":    │   │   "token_type": "access",│   │   base64(header) + "." +     │
+│    "HS256", │   │   "exp": 1717000000,     │   │   base64(payload),           │
+│   "typ":    │   │   "user_id": "...",       │   │   SECRET_KEY                 │
+│   "JWT"     │   │   "email": "user@..."    │   │ )                            │
+│ }           │   │ }                        │   │                              │
+└──────┬──────┘   └──────────┬───────────────┘   └──────────────┬───────────────┘
+       │                     │                                  │
+       └── Algoritmo ────────┴── Dados do token ────────────────┴── Assinatura
+           HS256                                                     criptográfica
+```
+
+**Como a SECRET_KEY protege o token:**
+1. O servidor gera o token: `HMAC-SHA256(header.payload, SECRET_KEY)`
+2. O cliente recebe e armazena o token
+3. O cliente envia o token em toda requisição: `Authorization: Bearer <token>`
+4. O servidor RECALCULA a assinatura com a SECRET_KEY
+5. Se o payload foi alterado → assinatura não confere → **401 Unauthorized**
+
+> 🛡️ **IMPORTANTE**: a SECRET_KEY do Django é a MESMA usada para assinar os tokens. Se vazar, qualquer um pode forjar tokens de administrador.
+
+---
+
+## 5. Access vs Refresh — Estratégia de Mitigação
+
+| Token | Duração (neste projeto) | Uso |
+|---|---|---|
+| **Access** | 60 minutos | Enviado no header `Authorization` para autenticar requisições |
+| **Refresh** | 7 dias | Enviado para `/api/token/refresh` para obter NOVOS access tokens |
+
+### Por que dois tokens?
+
+```
+ACCESS curto (60min)           REFRESH longo (7d)
+    │                               │
+    ├── Mitigação de danos:         ├── Experiência do usuário:
+    │   se o token vazar,           │   não precisa logar toda hora
+    │   a janela de ataque é curta  │
+    │                               │
+    └── Enviado em toda             └── Armazenado em secure storage
+        requisição (mais exposto)       (menos exposto)
+```
+
+### Fluxo de renovação transparente (Front-end)
+
+```javascript
+// Interceptor do React/Axios:
+api.interceptors.response.use(
+  response => response,
+  async error => {
+    if (error.response.status === 401) {
+      const { data } = await api.post('/api/token/refresh', { refresh });
+      localStorage.setItem('access', data.access);
+      error.config.headers.Authorization = `Bearer ${data.access}`;
+      return api(error.config);  // re-tenta a requisição original
+    }
+    return Promise.reject(error);
+  }
+);
+```
+
+### ROTATE_REFRESH_TOKENS
+
+```python
+SIMPLE_JWT = {
+    'ROTATE_REFRESH_TOKENS': True,           # cada refresh gera UM NOVO refresh
+    'BLACKLIST_AFTER_ROTATION': True,         # token anterior é invalidado
+}
+```
+
+Se um refresh token for roubado e o usuário legítimo fizer refresh, o token roubado é invalidado — o atacante perde o acesso.
+
+---
+
+## 6. Simple JWT + django.contrib.auth
+
+O `rest_framework_simplejwt` se acopla ao sistema de autenticação nativo do Django:
+
+```
+django.contrib.auth (User model)
+        │
+        ▼
+Simple JWT (gera/valida tokens)
+        │
+        ▼
+DRF (JWTAuthentication → lê o header Authorization)
+        │
+        ▼
+ViewSets (permission_classes)
+```
+
+```python
+# settings.py
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+}
+
+# views.py
+class ProductViewSet(ModelViewSet):
+    permission_classes = (IsAuthenticatedOrReadOnly,)
+    # GET → qualquer um
+    # POST/PUT/DELETE → apenas usuários com token JWT válido
+```
+
+### permission_classes mais comuns
+
+| Classe | Efeito |
+|---|---|
+| `AllowAny` | Todos acessam (público) |
+| `IsAuthenticated` | Precisa de token JWT |
+| `IsAuthenticatedOrReadOnly` | GET = público, POST/PUT/DELETE = autenticado |
+| `IsAdminUser` | Apenas `is_staff=True` |
+| `~Q()` | Custom permissions (composed via operadores lógicos) |
+
+---
+
+## 7. ModelViewSet — CRUD em 3 Linhas
+
+Um `ModelViewSet` substitui **6 APIViews** separadas em uma única classe:
+
+```python
+class ProductViewSet(ModelViewSet):
+    queryset = Product.objects.select_related('category').all()
+    serializer_class = ProductSerializer
+    permission_classes = (IsAuthenticatedOrReadOnly,)
+```
+
+### O que ele gera automaticamente:
+
+| Método HTTP | Ação | Equivalente APIView manual |
+|---|---|---|
+| `GET /products/` | `list()` → lista paginada | `APIView.get()` + `Product.objects.all()` |
+| `POST /products/` | `create()` → novo registro | `APIView.post()` + `serializer.save()` |
+| `GET /products/{pk}/` | `retrieve()` → detalhe | `APIView.get(pk)` + `get_object_or_404()` |
+| `PUT /products/{pk}/` | `update()` → substituição total | `APIView.put()` + `serializer.save()` |
+| `PATCH /products/{pk}/` | `partial_update()` → atualização parcial | `APIView.patch()` |
+| `DELETE /products/{pk}/` | `destroy()` → exclusão | `APIView.delete()` + `instance.delete()` |
+
+### APIView vs ModelViewSet — quando usar cada um
+
+| Cenário | Recomendado |
+|---|---|
+| CRUD padrão de um modelo | `ModelViewSet` + `DefaultRouter` |
+| Endpoint customizado (ex: dashboard, relatório) | `APIView` |
+| Operações específicas sem CRUD completo | `GenericAPIView` + mixins |
+
+---
+
+## 8. DefaultRouter — Roteamento Automático
+
+O `DefaultRouter` gera automaticamente as URLs para cada ViewSet registrado:
+
+```python
+router = DefaultRouter()
+router.register('products', ProductViewSet, basename='products')
+urlpatterns += router.urls
+```
+
+### URLs geradas:
+
+```
+/products/api/                  →  Api root (autodescobrimento)
+/products/api/products/         →  GET (list), POST (create)
+/products/api/products/{pk}/    →  GET (retrieve), PUT (update), PATCH, DELETE
+```
+
+### Formato do nome das URLs (para `reverse()` ou `{% url %}`):
+
+```
+products-list       →  /products/api/products/
+products-detail     →  /products/api/products/{pk}/
+```
+
+---
+
+## 9. Paginação Global
+
+Configuração única no `settings.py` que afeta **todos** os endpoints:
+
+```python
+REST_FRAMEWORK = {
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 20,
+}
+```
+
+### Formato da resposta paginada:
+
+```json
+GET /products/api/products/?page=1
+
+{
+    "count": 150,              ← total de registros
+    "next": "http://...?page=3",  ← próxima página (ou null)
+    "previous": "http://...?page=1", ← página anterior (ou null)
+    "results": [                ← dados da página atual
+        { "uuid": "...", "name": "Produto 1" },
+        { "uuid": "...", "name": "Produto 2" },
+        ...
+    ]
+}
+```
+
+### Interação com o Front-end:
+
+```javascript
+// React — rolagem infinita:
+async function loadPage(page) {
+    const { data } = await api.get(`/products/api/products/?page=${page}`);
+    setProducts(prev => [...prev, ...data.results]);
+    setHasMore(data.next !== null);
+}
+```
+
+---
+
+## 10. Filtros Automatizados (django-filter)
+
+Três tipos de filtro configurados globalmente e customizáveis por ViewSet:
+
+### 1. `DjangoFilterBackend` — Filtro exato
+
+```python
+# ViewSet
+filterset_fields = ['category']
+
+# Uso: GET /products/api/products/?category=<uuid>
+# Retorna apenas produtos da categoria especificada
+```
+
+### 2. `SearchFilter` — Busca textual
+
+```python
+# ViewSet
+search_fields = ['name', 'category__name']  # suporta lookup relacional __
+
+# Uso: GET /products/api/products/?search=python
+# Retorna produtos com "python" no nome OU no nome da categoria
+# Internamente: WHERE name ILIKE '%python%' OR category__name ILIKE '%python%'
+```
+
+### 3. `OrderingFilter` — Ordenação dinâmica
+
+```python
+# ViewSet
+ordering_fields = ['price', 'created_at']
+
+# Uso: GET /products/api/products/?ordering=-price
+# Retorna produtos ordenados por preço DECRESCENTE
+# Múltiplos: ?ordering=-price,created_at
+```
+
+### Combinando filtros na mesma requisição:
+
+```
+GET /products/api/products/?search=python&category=<uuid>&ordering=-price
+└──────────────┬────────────────┘
+               └── Todos os filtros são aplicados EM CADEIA no queryset
+```
+
+---
+
+## 11. Writable Nested Serializers + transaction.atomic() + F()
+
+### O problema
+
+Por padrão, serializers aninhados (ex: `items = OrderItemSerializer(many=True)`) são **read-only**. Tentar criar um pedido com itens no mesmo JSON retorna erro.
+
+### A solução: sobrescrever `create()` com `transaction.atomic()`
+
+```python
+class OrderSerializer(serializers.ModelSerializer):
+    # Aninhamento com many=True → espera um ARRAY de itens
+    items = OrderItemSerializer(many=True)
+
+    class Meta:
+        model = Order
+        fields = ('uuid', 'user', 'created_at', 'paid', 'items')
+
+    def create(self, validated_data):
+        items_data = validated_data.pop('items')
+
+        with transaction.atomic():         # ← TUDO ou NADA
+            order = Order.objects.create(**validated_data)
+
+            for item_data in items_data:
+                OrderItem.objects.create(order=order, **item_data)
+
+                # F() expression: baixa atômica no estoque
+                # O cálculo acontece no BANCO, não na RAM do Python
+                Product.objects.filter(uuid=item_data['product'].uuid).update(
+                    stock=F('stock') - item_data['quantity']
+                )
+
+        return order
+```
+
+### JSON esperado na criação:
+
+```json
+POST /products/api/orders/
+
+{
+    "user": "uuid-do-usuario",
+    "items": [
+        {"product": "uuid-produto-1", "quantity": 2, "price": 59.90},
+        {"product": "uuid-produto-2", "quantity": 1, "price": 29.90}
+    ]
+}
+```
+
+### transaction.atomic() — O que garante:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  INÍCIO DA TRANSAÇÃO                                            │
+│                                                                 │
+│  1. Order.objects.create(...)                                   │
+│       ↓                                                         │
+│  2. OrderItem.objects.create(order, ...)  ← item 1            │
+│       ↓                                                         │
+│  3. Product.stock = F('stock') - qtd      ← baixa estoque     │
+│       ↓                                                         │
+│  4. OrderItem.objects.create(order, ...)  ← item 2            │
+│       ↓                                                         │
+│  ✓ SE TUDO OK → COMMIT (dados persistidos)                    │
+│  ✗ SE ALGO FALHAR → ROLLBACK (nada é salvo)                   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### F() + transaction.atomic() — Prevenção de Race Condition
+
+```python
+# ❌ PERIGOSO (race condition):
+produto = Product.objects.get(uuid=...)       # 1. Lê stock=10
+produto.stock -= quantidade                     # 2. Calcula 10-3=7 (em Python)
+produto.save()                                  # 3. Salva stock=7
+# Se 2 usuários compram ao mesmo tempo:
+#   Usuário A: lê stock=10
+#   Usuário B: lê stock=10 (ainda não foi salvo!)
+#   A salva stock=7
+#   B salva stock=7 (PERDEU UMA VENDA — deveria ser 4!)
+
+# ✅ SEGURO (F() + atomic):
+with transaction.atomic():
+    Product.objects.filter(uuid=...).update(stock=F('stock') - quantidade)
+    # O MySQL executa: UPDATE ... SET stock = stock - 3
+    # O banco TRAVA a linha durante a operação → sem race condition
+```
+
+---
+
 # Referência ORM Django
 
 Guia de consulta rápida para o **Object-Relational Mapping (ORM)** do Django — a camada que traduz classes Python em tabelas SQL e vice-versa.

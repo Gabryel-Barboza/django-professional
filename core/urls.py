@@ -1,22 +1,23 @@
 """
 URL configuration for core project.
 
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/6.0/topics/http/urls/
-
 ┌──────────────────────────────────────────────────────────────────────┐
-│ ROTEAMENTO (URL dispatcher)                                          │
+│ JWT ENDPOINTS (Simple JWT)                                          │
 │                                                                      │
-│ O Django percorre urlpatterns em ORDEM até encontrar a primeira      │
-│ correspondência. A view associada é então chamada com a request.     │
+│ /api/token           POST {email, password} → {access, refresh}    │
+│   → Troca credenciais por um par de tokens JWT                     │
+│   → access (60min): usado no header Authorization: Bearer <token>  │
+│   → refresh (7d): usado para obter NOVOS access tokens sem relogin │
 │                                                                      │
-│ CONCEITOS:                                                           │
-│   path(route, view, name)   → rota simples (sem regex)               │
-│   include()                → delega roteamento para outro arquivo    │
-│   name=                    → referência reversa via {% url %}        │
+│ /api/token/refresh   POST {refresh} → {access} ( + novo refresh )  │
+│   → Quando o access expira, o front-end chama este endpoint         │
+│   → Com ROTATE_REFRESH_TOKENS=True, UM NOVO refresh é gerado       │
+│   → O refresh anterior é invalidado (blacklist) se configurado     │
 │                                                                      │
-│ Exemplo de adição futura:                                            │
-│   path('conta/', include('users.urls')),                             │
+│ ESTRATÉGIA ACCESS vs REFRESH:                                       │
+│   Access token CURTO (60min) → minimiza danos se vazar            │
+│   Refresh token LONGO (7d) → evita login constante                │
+│   Front-end renova silenciosamente via interceptor                  │
 └──────────────────────────────────────────────────────────────────────┘
 """
 
@@ -24,14 +25,14 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 urlpatterns = [
-    # admin.site.urls já vem com todas as views prontas (login, logout, CRUD)
     path('admin/', admin.site.urls),
-    # Tudo que começa com /produtos/ é delegado ao app produtos
     path('products/', include('produtos.urls')),
+    path('api/token', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/token/refresh', TokenRefreshView.as_view(), name='token_refresh'),
 ]
 
-# Se em ambiente de desenvolvimento, adicionar URL para arquivos estáticos locais.
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

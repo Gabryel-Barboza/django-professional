@@ -1,42 +1,4 @@
-"""
-MIDDLEWARES — Interceptação Global de Requisições
 
-┌──────────────────────────────────────────────────────────────────────┐
-│ O que é um Middleware?                                               │
-│   É uma camada de processamento que toda requisição HTTP atravessa  │
-│   ANTES de chegar na View e DEPOIS da View processar.              │
-│                                                                      │
-│ CICLO DE VIDA:                                                       │
-│   1. __init__(get_response)                                          │
-│      → Executado UMA VEZ quando o servidor Django inicia            │
-│      → Armazena get_response (callable que encadeia ao próximo      │
-│        middleware ou à view)                                         │
-│                                                                      │
-│   2. __call__(request)                                               │
-│      → Executado em CADA requisição                                 │
-│      → Código ANTES de get_response(request):                       │
-│          - Processa a request (log, validação, modificação)         │
-│      → get_response(request):                                       │
-│          - Passa a request para o PRÓXIMO middleware ou para a View │
-│      → Código DEPOIS de get_response(request):                      │
-│          - Processa a response (log, modificar headers, etc.)       │
-│                                                                      │
-│ REGISTRO (em settings.py):                                           │
-│   MIDDLEWARE = [                                                     │
-│       '...',                                                         │
-│       'core.middlewares.PerformanceLogMiddleware',                   │
-│   ]                                                                  │
-│   A ORDEM IMPORTA! Executa de cima para baixo na entrada,           │
-│   de baixo para cima na saída.                                      │
-│                                                                      │
-│ CASOS DE USO:                                                        │
-│   - Log de performance e auditoria                                  │
-│   - Restrição de acesso global (manutenção, IP block)              │
-│   - Injeção de headers de segurança (CSP, HSTS)                    │
-│   - Medir tempo de resposta                                         │
-│   - Transformar request/response                                    │
-└──────────────────────────────────────────────────────────────────────┘
-"""
 
 import time
 
