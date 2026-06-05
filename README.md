@@ -5,6 +5,7 @@ Este repositório foi desenvolvido com o propósito de consolidar conceitos avan
 A branch `django-api` foi criada para separar o contexto do Django tradicional com o DRF (Django Rest Framework).
 
 O objetivo principal deste projeto não é apenas construir mais um e-commerce, mas sim dominar os padrões de mercado, boas práticas de arquitetura, otimização de consultas e segurança que diferenciam um desenvolvedor júnior de um profissional pronto para o mercado internacional.
+
 🎯 Objetivos de Aprendizado Conquistados
 1. Infraestrutura e Ambientes Isolados
 
