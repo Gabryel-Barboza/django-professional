@@ -35,8 +35,23 @@ from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 from .models import User
 
 
+class CustomUserCreationForm(UserCreationForm):
+    class Meta(UserCreationForm.Meta):
+        model = User
+        fields = ('email',)
+
+
+class CustomUserChangeForm(UserChangeForm):
+    class Meta:
+        model = User
+        fields = '__all__'
+
+
 @admin.register(User)
 class CustomUserAdmin(UserAdmin):
+    form = CustomUserChangeForm
+    add_form = CustomUserCreationForm
+
     list_display = ('email', 'username', 'cpf')
     search_fields = ('email', 'username', 'cpf')
     ordering = ('email',)
@@ -59,15 +74,7 @@ class CustomUserAdmin(UserAdmin):
         ),
         ('Datas', {'fields': ('last_login', 'date_joined')}),
     )
-
-
-class CustomUserCreationForm(UserCreationForm):
-    class Meta(UserCreationForm.Meta):
-        model = User
-        fields = ('email',)
-
-
-class CustomUserChangeForm(UserChangeForm):
-    class Meta:
-        model = User
-        fields = '__all__'
+    add_fieldsets = (
+        'Novo Usuário',
+        {'fields': ('username', 'email', 'password1', 'password2')},
+    )
